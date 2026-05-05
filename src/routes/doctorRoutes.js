@@ -1,0 +1,9 @@
+const r = require('express').Router();
+const C = require('../controllers/controllers');
+const { protect, allow } = require('../middleware/authMiddleware');
+r.get('/',           C.getDoctors);
+r.get('/specialties',C.getSpecialties);
+r.get('/me',         protect, allow('doctor'), C.getMyDoctorProfile);
+r.put('/me',         protect, allow('doctor'), C.updateDoctorProfile);
+r.get('/:id',        C.getDoctor);
+module.exports = r;

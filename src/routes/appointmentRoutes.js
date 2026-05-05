@@ -1,0 +1,12 @@
+const r = require('express').Router();
+const C = require('../controllers/controllers');
+const { protect, allow } = require('../middleware/authMiddleware');
+r.post('/',                   protect, allow('patient'),        C.bookAppointment);
+r.get('/',                    protect,                          C.getMyAppointments);
+r.get('/doctor/dashboard',    protect, allow('doctor'),         C.getDoctorDashboard);
+r.get('/admin/all',           protect, allow('admin'),          C.getAllAppointments);
+r.get('/:id',                 protect,                          C.getAppointment);
+r.put('/:id/status',          protect, allow('doctor','admin'), C.updateStatus);
+r.put('/:id/prescription',    protect, allow('doctor'),         C.addPrescription);
+r.put('/:id/cancel',          protect,                          C.cancelAppointment);
+module.exports = r;

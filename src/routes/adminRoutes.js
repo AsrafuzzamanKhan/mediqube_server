@@ -1,0 +1,10 @@
+const r = require('express').Router();
+const C = require('../controllers/controllers');
+const { protect, allow } = require('../middleware/authMiddleware');
+r.get('/stats',              protect, allow('admin'), C.getStats);
+r.get('/users',              protect, allow('admin'), C.getAllUsers);
+r.put('/users/:id',          protect, allow('admin'), C.updateUserAdmin);
+r.delete('/users/:id',       protect, allow('admin'), C.deleteUserAdmin);
+r.get('/doctors',            protect, allow('admin'), C.getAllDoctors);
+r.put('/doctors/:id/approve',protect, allow('admin'), C.approveDoctor);
+module.exports = r;

@@ -1,0 +1,10 @@
+const r = require('express').Router();
+const C = require('../controllers/controllers');
+const { protect, allow } = require('../middleware/authMiddleware');
+r.post('/',              protect,                C.createTicket);
+r.get('/my',             protect,                C.getMyTickets);
+r.get('/all',            protect, allow('admin'),C.getAllTickets);
+r.get('/:id',            protect,                C.getTicket);
+r.post('/:id/reply',     protect,                C.replyTicket);
+r.put('/:id/status',     protect, allow('admin'),C.updateTicketStatus);
+module.exports = r;
