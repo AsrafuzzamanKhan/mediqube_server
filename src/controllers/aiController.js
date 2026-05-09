@@ -10,7 +10,7 @@ async function callGroq(messages, systemPrompt) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: 'llama3-8b-8192',   // Free model on Groq
+      model: 'llama-3.1-8b-instant',   // Free model on Groq
       max_tokens: 1024,
       temperature: 0.7,
       messages: [
