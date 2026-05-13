@@ -28,10 +28,10 @@ async function seed() {
   await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mediqube');
   await Promise.all([User.deleteMany({}), Doctor.deleteMany({}), Patient.deleteMany({}), FAQ.deleteMany({})]);
 
-  const admin = await User.create({ name:'Admin User', email:'admin@mediqube.com.au', password:'Admin@1234', role:'admin', isActive:true });
+  const admin = await User.create({ name:'Admin User', email:'admin@mediqube.com.au', password:'Admin@1234', role:'admin', isActive:true, isVerified:true });
 
   for (const d of DOCTORS) {
-    const u = await User.create({ name:d.name, email:d.email, password:'Doctor@1234', role:'doctor', isActive:true });
+    const u = await User.create({ name:d.name, email:d.email, password:'Doctor@1234', role:'doctor', isActive:true, isVerified:true });
     await Doctor.create({
       user:u._id, specialties:d.specialties, experience:d.exp,
       consultationFee:d.fee, videoFee:d.vfee, bio:d.bio,
@@ -45,7 +45,7 @@ async function seed() {
     });
   }
 
-  const pu = await User.create({ name:'John Smith', email:'patient@mediqube.com.au', password:'Patient@1234', role:'patient', isActive:true, phone:'0412 345 678' });
+  const pu = await User.create({ name:'John Smith', email:'patient@mediqube.com.au', password:'Patient@1234', role:'patient', isActive:true, isVerified:true, phone:'0412 345 678' });
   await Patient.create({ user:pu._id, gender:'male', dateOfBirth:new Date('1990-05-15'), medicareNumber:'2123 45670 1', bloodType:'O+', allergies:['Penicillin'], address:{street:'45 Bourke St',suburb:'Melbourne',state:'VIC',postcode:'3000'} });
 
   for (const f of FAQS) await FAQ.create({ ...f, isPublished:true, createdBy:admin._id });

@@ -19,12 +19,10 @@ exports.register = asyncHandler(async (req, res) => {
   const exists = await User.findOne({ email });
   if (exists) { res.status(400); throw new Error('Email already registered'); }
   const safeRole = ['patient', 'doctor'].includes(role) ? role : 'patient';
-  const verifyToken = crypto.randomBytes(32).toString('hex');
-  const user = await User.create({ name, email, password, role: safeRole, phone, verificationToken: verifyToken, verificationTokenExpire: Date.now() + 24 * 60 * 60 * 1000 });
+  const user = await User.create({ name, email, password, role: safeRole, phone, isVerified: true });
   if (safeRole === 'doctor') await Doctor.create({ user: user._id });
   else await Patient.create({ user: user._id });
-  verificationEmail({ to: user.email, name: user.name, token: verifyToken });
-  res.status(201).json({ success: true, message: 'Account created. Please check your email to verify your account.' });
+  res.status(201).json({ success: true, message: 'Account created. You can now sign in.' });
 });
 
 // Role is fetched from DB — client just sends email + password
@@ -213,7 +211,18 @@ exports.updateStatus = asyncHandler(async (req, res) => {
   await a.save();
   if (['approved', 'rejected', 'cancelled'].includes(status)) {
     await notify(io, { recipient: a.patient._id, sender: req.user._id, type: `appointment_${status}`, title: `Appointment ${status.charAt(0).toUpperCase() + status.slice(1)}`, message: `Your appointment with Dr. ${a.doctor.name} has been ${status}.`, data: { appointmentId: a._id } });
-    statusEmail({ to: a.patient.email, patientName: a.patient.name, doctorName: a.doctor.name, date: a.appointmentDate, time: a.appointmentTime, type: a.type, status });
+    let suggestedDoctors = [];
+    if (status === 'rejected') {
+      const rejectedDoctor = await Doctor.findOne({ user: a.doctor._id }).select('specialties');
+      if (rejectedDoctor?.specialties?.length) {
+        suggestedDoctors = await Doctor.find({
+          user: { $ne: a.doctor._id },
+          specialties: { $in: rejectedDoctor.specialties },
+          isApproved: true,
+        }).populate('user', 'name').select('user specialties consultationFee videoFee rating experience').limit(3);
+      }
+    }
+    statusEmail({ to: a.patient.email, patientName: a.patient.name, doctorName: a.doctor.name, date: a.appointmentDate, time: a.appointmentTime, type: a.type, status, rejectionReason: a.rejectionReason, suggestedDoctors });
   }
   res.json({ success: true, data: a });
 });

@@ -11,11 +11,14 @@ const cookieParser = require('cookie-parser');
 
 const connectDB = require('./config/db');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const { startScheduler } = require('./utils/scheduler');
 
-connectDB().catch(e => {
-  console.error(e);
-  process.exit(1);
-});
+connectDB()
+  .then(() => startScheduler())
+  .catch(e => {
+    console.error(e);
+    process.exit(1);
+  });
 
 const app = express();
 const server = http.createServer(app);

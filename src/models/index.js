@@ -10,7 +10,7 @@ const userSchema = new mongoose.Schema({
   phone:     { type: String, default: '' },
   avatar:    { type: String, default: '' },
   isActive:              { type: Boolean, default: true },
-  isVerified:            { type: Boolean, default: false },
+  isVerified:            { type: Boolean, default: true },
   verificationToken:     String,
   verificationTokenExpire: Date,
   resetPasswordToken:    String,
@@ -83,6 +83,7 @@ const appointmentSchema = new mongoose.Schema({
     issuedAt:     Date,
   },
   emailSent:       { type: Boolean, default: false },
+  reminderSent:    { type: Boolean, default: false },
   completedAt:     Date,
 }, { timestamps: true });
 

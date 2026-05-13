@@ -37,16 +37,46 @@ const prescriptionEmail = ({ to, patientName, doctorName, date, prescription }) 
   });
 };
 
-const appointmentStatusEmail = ({ to, patientName, doctorName, date, time, type, status }) => {
+const appointmentStatusEmail = ({ to, patientName, doctorName, date, time, type, status, rejectionReason, suggestedDoctors = [] }) => {
   const clr = { approved: '#16a34a', rejected: '#dc2626', cancelled: '#6b7280' }[status] || '#374151';
+
+  const rejectionBlock = status === 'rejected' ? `
+    ${rejectionReason ? `
+      <div style="background:#fef2f2;border-left:4px solid #dc2626;padding:12px 16px;margin:16px 0;border-radius:4px">
+        <b style="color:#dc2626">Reason:</b>
+        <p style="margin:4px 0 0;color:#374151">${rejectionReason}</p>
+      </div>` : ''}
+    ${suggestedDoctors.length ? `
+      <div style="margin-top:24px">
+        <h3 style="color:#1a6b3a;margin:0 0 12px">🩺 Available Doctors with Similar Specialty</h3>
+        <p style="color:#6b7280;font-size:13px;margin:0 0 12px">You can book an appointment with one of the following doctors:</p>
+        ${suggestedDoctors.map(d => `
+          <div style="border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <p style="margin:0;font-weight:700;color:#111827">Dr. ${d.user?.name || 'Unknown'}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#6b7280">${(d.specialties || []).slice(0, 2).join(', ')}</p>
+              <p style="margin:4px 0 0;font-size:12px;color:#6b7280">⭐ ${d.rating} &nbsp;·&nbsp; ${d.experience} yrs exp</p>
+            </div>
+            <div style="text-align:right">
+              <p style="margin:0;font-size:13px;color:#374151">In-Person: <b>$${d.consultationFee}</b></p>
+              <p style="margin:4px 0 0;font-size:13px;color:#374151">Video: <b>$${d.videoFee}</b></p>
+            </div>
+          </div>`).join('')}
+        <div style="text-align:center;margin-top:16px">
+          <a href="${process.env.CLIENT_URL}/patient/find-doctor" style="background:#1a6b3a;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:14px">Find a Doctor</a>
+        </div>
+      </div>` : ''}
+  ` : '';
+
   return sendEmail({
     to, subject: `Appointment ${status} — MediQube`,
-    html: `<div style="font-family:Arial,sans-serif;max-width:500px;margin:0 auto">
+    html: `<div style="font-family:Arial,sans-serif;max-width:540px;margin:0 auto">
       <div style="background:linear-gradient(135deg,#1a6b3a,#2d9b5a);padding:24px;text-align:center;border-radius:12px 12px 0 0"><h2 style="color:white;margin:0">Appointment Update</h2></div>
       <div style="background:white;padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
-        <p>Hi <b>${patientName}</b>, your appointment with <b>Dr. ${doctorName}</b> is <span style="color:${clr};font-weight:700">${status.toUpperCase()}</span>.</p>
+        <p>Hi <b>${patientName}</b>, your appointment with <b>Dr. ${doctorName}</b> has been <span style="color:${clr};font-weight:700">${status.toUpperCase()}</span>.</p>
         <p><b>Date:</b> ${new Date(date).toLocaleDateString('en-AU')} &nbsp; <b>Time:</b> ${time} &nbsp; <b>Type:</b> ${type === 'video' ? '📹 Video' : '🏥 In-Person'}</p>
         ${status === 'approved' ? '<p style="color:#16a34a">✅ Please be ready on time.</p>' : ''}
+        ${rejectionBlock}
       </div></div>`,
   });
 };
@@ -114,4 +144,34 @@ const bookingConfirmEmail = ({ to, patientName, doctorName, date, time, type }) 
       </div></div>`,
   });
 
-module.exports = { generateToken, sendEmail, resetPasswordEmail, verificationEmail, welcomeEmail, bookingConfirmEmail, prescriptionEmail, appointmentStatusEmail };
+const videoReminderEmail = ({ patientEmail, patientName, doctorEmail, doctorName, date, time, roomUrl }) => {
+  const dateStr = new Date(date).toLocaleDateString('en-AU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const makeHtml = (recipientName, role) => `
+    <div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto">
+      <div style="background:linear-gradient(135deg,#1a6b3a,#2d9b5a);padding:24px;text-align:center;border-radius:12px 12px 0 0">
+        <h2 style="color:white;margin:0">📹 Video Call Starting Soon</h2>
+      </div>
+      <div style="background:white;padding:28px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 12px 12px">
+        <p>Hi <b>${recipientName}</b>,</p>
+        <p>Your video consultation ${role === 'doctor' ? `with <b>${patientName}</b>` : `with <b>Dr. ${doctorName}</b>`} is starting in <b style="color:#dc2626">5 minutes</b>.</p>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px;margin:20px 0">
+          <p style="margin:0 0 6px"><b>📅 Date:</b> ${dateStr}</p>
+          <p style="margin:0 0 6px"><b>🕐 Time:</b> ${time}</p>
+          <p style="margin:0"><b>👤 ${role === 'doctor' ? 'Patient' : 'Doctor'}:</b> ${role === 'doctor' ? patientName : 'Dr. ' + doctorName}</p>
+        </div>
+        <div style="text-align:center;margin:24px 0">
+          <a href="${roomUrl}" style="background:#1a6b3a;color:white;padding:13px 32px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px">
+            Join Video Call
+          </a>
+        </div>
+        <p style="font-size:12px;color:#9ca3af;text-align:center">Make sure your camera and microphone are working before joining.</p>
+      </div>
+    </div>`;
+
+  return Promise.all([
+    sendEmail({ to: patientEmail, subject: '⏰ Your video call starts in 5 minutes — MediQube', html: makeHtml(patientName, 'patient') }),
+    sendEmail({ to: doctorEmail,  subject: '⏰ Video consultation starts in 5 minutes — MediQube', html: makeHtml(doctorName, 'doctor') }),
+  ]);
+};
+
+module.exports = { generateToken, sendEmail, resetPasswordEmail, verificationEmail, welcomeEmail, bookingConfirmEmail, prescriptionEmail, appointmentStatusEmail, videoReminderEmail };
