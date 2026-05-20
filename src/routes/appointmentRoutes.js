@@ -5,8 +5,11 @@ r.post('/',                   protect, allow('patient'),        C.bookAppointmen
 r.get('/',                    protect,                          C.getMyAppointments);
 r.get('/doctor/dashboard',    protect, allow('doctor'),         C.getDoctorDashboard);
 r.get('/admin/all',           protect, allow('admin'),          C.getAllAppointments);
+r.get('/slots',               protect,                          C.getBookedSlots);
+r.get('/by-room/:roomId',     protect,                          C.getAppointmentByRoom);
 r.get('/:id',                 protect,                          C.getAppointment);
 r.put('/:id/status',          protect, allow('doctor','admin'), C.updateStatus);
 r.put('/:id/prescription',    protect, allow('doctor'),         C.addPrescription);
 r.put('/:id/cancel',          protect,                          C.cancelAppointment);
+r.put('/:id/rate',            protect, allow('patient'),        C.rateAppointment);
 module.exports = r;

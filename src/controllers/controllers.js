@@ -248,6 +248,46 @@ exports.cancelAppointment = asyncHandler(async (req, res) => {
   res.json({ success: true, data: a });
 });
 
+exports.getBookedSlots = asyncHandler(async (req, res) => {
+  const { doctorId, date } = req.query;
+  if (!doctorId || !date) { res.status(400); throw new Error('doctorId and date required'); }
+  const start = new Date(date); start.setHours(0, 0, 0, 0);
+  const end   = new Date(date); end.setHours(23, 59, 59, 999);
+  const booked = await Appointment.find({
+    doctor: doctorId,
+    appointmentDate: { $gte: start, $lte: end },
+    status: { $in: ['pending', 'approved'] },
+  }).select('appointmentTime');
+  res.json({ success: true, data: booked.map(a => a.appointmentTime) });
+});
+
+exports.getAppointmentByRoom = asyncHandler(async (req, res) => {
+  const a = await Appointment.findOne({ videoRoomId: req.params.roomId })
+    .populate('doctor', 'name email avatar')
+    .populate('patient', 'name');
+  if (!a) { res.status(404); throw new Error('Not found'); }
+  const ok = [a.patient._id.toString(), a.doctor._id.toString()].includes(req.user._id.toString());
+  if (!ok) { res.status(403); throw new Error('Not authorised'); }
+  res.json({ success: true, data: a });
+});
+
+exports.rateAppointment = asyncHandler(async (req, res) => {
+  const { rating, comment } = req.body;
+  if (!rating || rating < 1 || rating > 5) { res.status(400); throw new Error('Rating must be between 1 and 5'); }
+  const a = await Appointment.findById(req.params.id);
+  if (!a) { res.status(404); throw new Error('Not found'); }
+  if (a.patient.toString() !== req.user._id.toString()) { res.status(403); throw new Error('Not authorised'); }
+  if (a.rating) { res.status(400); throw new Error('Already rated'); }
+  a.rating = rating;
+  if (comment) a.ratingComment = comment;
+  await a.save();
+  // Recompute the doctor's average rating across all rated appointments
+  const rated = await Appointment.find({ doctor: a.doctor, rating: { $exists: true, $ne: null } }).select('rating');
+  const avg = rated.reduce((s, r) => s + r.rating, 0) / rated.length;
+  await Doctor.findOneAndUpdate({ user: a.doctor }, { rating: Math.round(avg * 10) / 10 });
+  res.json({ success: true, data: a });
+});
+
 exports.getDoctorDashboard = asyncHandler(async (req, res) => {
   const id = req.user._id;
   const start = new Date(); start.setHours(0, 0, 0, 0);

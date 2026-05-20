@@ -85,6 +85,8 @@ const appointmentSchema = new mongoose.Schema({
   emailSent:       { type: Boolean, default: false },
   reminderSent:    { type: Boolean, default: false },
   completedAt:     Date,
+  rating:          { type: Number, min: 1, max: 5 },
+  ratingComment:   { type: String, default: '' },
 }, { timestamps: true });
 
 // ─── Notification ─────────────────────────────────────────
