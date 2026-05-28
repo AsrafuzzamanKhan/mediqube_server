@@ -3,6 +3,8 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const { User, Doctor, Patient, Appointment, Notification, FAQ, Support } = require('../models');
 const { generateToken, resetPasswordEmail, verificationEmail, welcomeEmail, bookingConfirmEmail, prescriptionEmail, appointmentStatusEmail: statusEmail } = require('../utils/helpers');
+const { encrypt, encryptArray, decryptPatientDoc } = require('../utils/encryption');
+const { generateKitToken } = require('../utils/zegoToken');
 
 // ── notify helper ──────────────────────────────────────────
 const notify = async (io, { recipient, sender, type, title, message, data }) => {
@@ -90,12 +92,16 @@ exports.updateProfile = asyncHandler(async (req, res) => {
 exports.getPatientProfile = asyncHandler(async (req, res) => {
   const p = await Patient.findOne({ user: req.user._id }).populate('user', 'name email phone avatar');
   if (!p) { res.status(404); throw new Error('Profile not found'); }
-  res.json({ success: true, data: p });
+  res.json({ success: true, data: decryptPatientDoc(p) });
 });
 
 exports.updatePatientProfile = asyncHandler(async (req, res) => {
-  const p = await Patient.findOneAndUpdate({ user: req.user._id }, req.body, { new: true });
-  res.json({ success: true, data: p });
+  const update = { ...req.body };
+  if (update.medicareNumber) update.medicareNumber = encrypt(update.medicareNumber);
+  if (Array.isArray(update.allergies)) update.allergies = encryptArray(update.allergies);
+  if (Array.isArray(update.chronicConditions)) update.chronicConditions = encryptArray(update.chronicConditions);
+  const p = await Patient.findOneAndUpdate({ user: req.user._id }, update, { new: true });
+  res.json({ success: true, data: decryptPatientDoc(p) });
 });
 
 // ══════════════════════════════════════════════════════════
@@ -210,7 +216,7 @@ exports.updateStatus = asyncHandler(async (req, res) => {
   if (status === 'completed') a.completedAt = new Date();
   await a.save();
   if (['approved', 'rejected', 'cancelled'].includes(status)) {
-    await notify(io, { recipient: a.patient._id, sender: req.user._id, type: `appointment_${status}`, title: `Appointment ${status.charAt(0).toUpperCase() + status.slice(1)}`, message: `Your appointment with Dr. ${a.doctor.name} has been ${status}.`, data: { appointmentId: a._id } });
+    await notify(io, { recipient: a.patient._id, sender: req.user._id, type: `appointment_${status}`, title: `Appointment ${status.charAt(0).toUpperCase() + status.slice(1)}`, message: `Your appointment with ${a.doctor.name} has been ${status}.`, data: { appointmentId: a._id } });
     let suggestedDoctors = [];
     if (status === 'rejected') {
       const rejectedDoctor = await Doctor.findOne({ user: a.doctor._id }).select('specialties');
@@ -235,7 +241,7 @@ exports.addPrescription = asyncHandler(async (req, res) => {
   a.prescription = { ...req.body, issuedAt: new Date() };
   a.status = 'completed'; a.completedAt = new Date();
   await a.save();
-  await notify(io, { recipient: a.patient._id, sender: req.user._id, type: 'prescription_added', title: 'Prescription Ready', message: `Dr. ${req.user.name} issued your prescription.`, data: { appointmentId: a._id } });
+  await notify(io, { recipient: a.patient._id, sender: req.user._id, type: 'prescription_added', title: 'Prescription Ready', message: `${req.user.name} issued your prescription.`, data: { appointmentId: a._id } });
   if (!a.emailSent) { prescriptionEmail({ to: a.patient.email, patientName: a.patient.name, doctorName: req.user.name, date: a.appointmentDate, prescription: req.body }); a.emailSent = true; await a.save(); }
   res.json({ success: true, data: a });
 });
@@ -435,5 +441,22 @@ exports.updateTicketStatus = asyncHandler(async (req, res) => {
 // ZEGO TOKEN
 // ══════════════════════════════════════════════════════════
 exports.getZegoToken = asyncHandler(async (req, res) => {
-  res.json({ success: true, data: { appId: parseInt(process.env.ZEGO_APP_ID || '0'), userId: req.user._id.toString(), userName: req.user.name, roomId: req.body.roomId } });
+  const appId = parseInt(process.env.ZEGO_APP_ID || '0');
+  const secret = process.env.ZEGO_SERVER_SECRET || '';
+  const { roomId } = req.body;
+
+  console.log('[ZEGO] appId:', appId, 'secretLen:', secret.length, 'secretHex:', Buffer.from(secret).toString('hex'), 'userId:', req.user._id.toString());
+
+  if (!appId || secret.length !== 32) {
+    res.status(500); throw new Error('ZegoCloud credentials not configured');
+  }
+  if (!roomId) { res.status(400); throw new Error('roomId required'); }
+
+  const kitToken = generateKitToken(appId, req.user._id.toString(), req.user.name, roomId, secret, 3600);
+  console.log('[ZEGO] kitToken prefix:', kitToken.substring(0, 40));
+
+  res.json({
+    success: true,
+    data: { kitToken, userId: req.user._id.toString(), userName: req.user.name, roomId },
+  });
 });

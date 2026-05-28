@@ -96,28 +96,38 @@ exports.chat = asyncHandler(async (req, res) => {
   const { messages, message } = req.body;
   if (!message) { res.status(400); throw new Error('Message is required'); }
 
-  const doctors = await Doctor.find({ isApproved: true }).populate('user', 'name').lean();
-  const doctorList = doctors.map(d =>
-    `- ${d.user?.name} | Specialties: ${d.specialties?.join(', ')} | Fee: $${d.consultationFee} | Video: $${d.videoFee} | Experience: ${d.experience} yrs`
-  ).join('\n');
+  // Determine specialty from symptoms BEFORE querying the DB
+  const suggestedSpecialty = guessSpecialty(message);
+
+  // Only fetch doctors matching the detected specialty — Groq never receives unrelated doctor data or any patient data
+  const matchQuery = {
+    isApproved: true,
+    specialties: { $regex: suggestedSpecialty.split(' ')[0], $options: 'i' },
+  };
+  const doctors = await Doctor.find(matchQuery).populate('user', 'name').select('user specialties consultationFee videoFee experience').limit(5).lean();
+
+  const doctorList = doctors.length
+    ? doctors.map(d =>
+        `- ${d.user?.name} | Specialties: ${d.specialties?.join(', ')} | Fee: $${d.consultationFee} | Video: $${d.videoFee} | Experience: ${d.experience} yrs`
+      ).join('\n')
+    : 'No matching doctors currently available on MediQube.';
 
   const systemPrompt = `You are a friendly medical assistant for MediQube, an Australian GP appointment booking system.
 Your job is to:
 1. Listen to the patient's symptoms or health concern
-2. Suggest the most appropriate medical specialty they should see
+2. Confirm the most appropriate medical specialty they should see
 3. From the available doctors list below, recommend 1-2 specific doctors that match
 4. Keep responses short, friendly, and helpful — max 4 sentences
 5. Always end by saying the patient can click "Book Appointment" to proceed
 6. NEVER diagnose diseases — only suggest which specialist to see
 
-Available doctors on MediQube:
+Doctors available for ${suggestedSpecialty}:
 ${doctorList}
 
 Important: You are NOT a replacement for real medical advice. Always recommend seeing a doctor.`;
 
   const history = (messages || []).slice(-6);
   const reply = await callGroq([...history, { role: 'user', content: message }], systemPrompt);
-  const suggestedSpecialty = guessSpecialty(message);
 
   res.json({ success: true, data: { reply, suggestedSpecialty } });
 });
